@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from pathlib import Path
+import textwrap
 
 px.defaults.template = "plotly_white"
 
@@ -11,14 +12,38 @@ px.defaults.template = "plotly_white"
 BASE_DIR = Path(__file__).parent
 df = pd.read_csv(BASE_DIR / "MenoGlobgal_Mexico_survey_ENG_Dec2025_clean.csv")
 
-# Columns that can be selected for main frequency distribution
-question_columns = df.columns[[13,14,19,20,21,22,23,24,25,26]]
+# -------------------------------
+# 2️⃣ Define friendly names for survey questions
+# -------------------------------
+# Keys = raw column names in df, Values = display names in dashboard
+column_display_names = {
+    "12_clean": "Had you heard about perimenopause before taking this survey?",
+    "19. Evaluate how comfortable you feel discussing menopause with: [Partner]": "Evaluate how comfortable you feel discussing menopause with: [Partner]",
+    "19. Evaluate how comfortable you feel discussing menopause with: [Classmates]": "Evaluate how comfortable you feel discussing menopause with: [Classmates]",
+    "19. Evaluate how comfortable you feel discussing menopause with: [Work colleagues]": "Evaluate how comfortable you feel discussing menopause with: [Work colleagues]",
+    "19. Evaluate how comfortable you feel discussing menopause with: [Family members]": "Evaluate how comfortable you feel discussing menopause with: [Family members]",
+    "19. Evaluate how comfortable you feel discussing menopause with: [Healthcare provider]": "Evaluate how comfortable you feel discussing menopause with: [Healthcare provider]",
+    "19. Evaluate how comfortable you feel discussing menopause with: [Close friend]": "Evaluate how comfortable you feel discussing menopause with: [Close friend]",
+    "18. Women can get sexually transmitted infections (STIs) after menopause:": "Women can get sexually transmitted infections (STIs) after menopause:",
+    "17. Women can get pregnant during perimenopause:": "Women can get pregnant during perimenopause:",
+    "16. Menopause may increase the risk of: (Select all possible options)": "Menopause may increase the risk of: (Select all possible options)",
+    "11. At what age do you think women usually reach menopause?": "At what age do you think women usually reach menopause?",
+    "9. Where did you learn about Menopause? (Select all possible options)": "Where did you learn about Menopause? (Select all possible options)",
+    "13. What do you think are the symptoms of menopause? (Select all possible options)": "What do you think are the symptoms of menopause? (Select all possible options)"
+}
 
-# Columns for cross-distribution
-cross_columns = df.columns[[6, 35, 9, 10, 4, 5]]
+# Create list of columns that can appear in the main dropdown
+question_columns = list(column_display_names.keys())
+
+# Multi-select question indices (replace with your actual indices)
+multi_select_indices = [8, 12, 15]
+multi_select_columns = [df.columns[i] for i in multi_select_indices]
+
+# Columns for cross-distribution charts (replace with your actual indices)
+cross_columns = df.columns[[3, 30, 6, 7, 1, 2]]
 
 # -------------------------------
-# 🎨 Global color palette (fun & engaging)
+# 🎨 Global color palette
 # -------------------------------
 COLOR_SEQUENCE = [
     "#5DA5DA",  # bright blue
@@ -31,72 +56,64 @@ COLOR_SEQUENCE = [
     "#B2912F",  # mustard
 ]
 
-PRIMARY = "#F17C67"     # coral 
-SECONDARY ="#5DA5DA" # bright blue
-ACCENT = "#B276B2"       # purple
-
-
+PRIMARY = "#F17C67"     
+SECONDARY = "#5DA5DA" 
+ACCENT = "#B276B2"       
 
 # -------------------------------
-# 2️⃣ Streamlit UI
+# 3️⃣ Streamlit UI
 # -------------------------------
 st.set_page_config(layout="wide")
 st.title("MenoGlobal Mexico Survey Dashboard")
 
-# Dropdown to select main question
-selected_question = st.selectbox("Select a survey question:", question_columns)
+# Dropdown to select main question using friendly names
+selected_question = st.selectbox(
+    "Select a survey question:", 
+    options=[column_display_names[col] for col in question_columns]
+)
+
+# Map back friendly name to raw column name
+raw_selected_question = {v: k for k, v in column_display_names.items()}[selected_question]
 
 # -------------------------------
-# 3️⃣ Helper function to prepare counts with 'Other'
+# 4️⃣ Helper function to prepare counts with 'Other'
 # -------------------------------
 def prepare_counts(series, min_count=5):
     counts = series.value_counts().reset_index()
     counts.columns = [series.name, "count"]
-    # Group low-count categories into 'Other'
     counts[series.name] = counts.apply(
         lambda row: row[series.name] if row["count"] >= min_count else "Other", axis=1
     )
     counts = counts.groupby(series.name, as_index=False)["count"].sum()
-    # Compute percentage
     counts["percent"] = counts["count"] / counts["count"].sum() * 100
     return counts
 
 # -------------------------------
-# 4️⃣ Main horizontal percentage bar chart
+# 5️⃣ Main horizontal percentage bar chart
 # -------------------------------
+series = df[raw_selected_question].dropna()
 
-# List of multi-select question indices
-multi_select_indices = [11, 15, 18]
-multi_select_columns = [df.columns[i] for i in multi_select_indices]
-
-# Prepare series for plotting
-series = df[selected_question].dropna()
-
-# If multi-select, split/explode
-if selected_question in multi_select_columns:
+# Explode multi-select answers
+if raw_selected_question in multi_select_columns:
     series = series.str.split(", ").explode()
 
-# Compute counts and percentages
 main_counts = pd.DataFrame({
     "Answer": series.value_counts().index,
     "count": series.value_counts().values
 })
 main_counts["percent"] = main_counts["count"] / main_counts["count"].sum() * 100
 
-# Plot horizontal bar chart
 fig_main = px.bar(
     main_counts,
     x="percent",
-    y="Answer",  # use 'Answer' instead of original column for multi-select
+    y="Answer",
     orientation="h",
-    text=main_counts.apply(
-        lambda r: f"{r['count']} ({r['percent']:.0f}%)", axis=1
-    ),
+    text=main_counts.apply(lambda r: f"{r['count']} ({r['percent']:.0f}%)", axis=1),
 )
 
 fig_main.update_layout(
     yaxis_title=None,
-    xaxis_title="percent",
+    xaxis_title="Percent",
     yaxis={"categoryorder": "total ascending"},
     margin=dict(l=150, r=150, t=50, b=50),
     font=dict(family="Arial, sans-serif", size=16, color="black"),
@@ -104,7 +121,7 @@ fig_main.update_layout(
 )
 
 fig_main.update_traces(
-    marker_color="#FFBE7D",  # peach,
+    marker_color="#FFBE7D",
     textposition="outside",
     textfont_size=14
 )
@@ -112,15 +129,12 @@ fig_main.update_traces(
 st.plotly_chart(fig_main, use_container_width=True)
 
 # -------------------------------
-# 5️⃣ Filter df based on selected bar
+# 6️⃣ Filter df based on selected bar
 # -------------------------------
-
-# Get unique options for dropdown
-if selected_question in multi_select_columns:
-    # Flatten multi-select answers for dropdown
+if raw_selected_question in multi_select_columns:
     unique_options = series.dropna().unique()
 else:
-    unique_options = df[selected_question].dropna().unique()
+    unique_options = df[raw_selected_question].dropna().unique()
 
 selected_bar = st.selectbox(
     f"Filter {selected_question} by value (or show all)", 
@@ -129,58 +143,13 @@ selected_bar = st.selectbox(
 
 filtered_df = df.copy()
 if selected_bar != "All":
-    if selected_question in multi_select_columns:
-        # Keep rows where selected answer is in the multi-select list
-        filtered_df = filtered_df[filtered_df[selected_question].str.contains(selected_bar, na=False)]
+    if raw_selected_question in multi_select_columns:
+        filtered_df = filtered_df[filtered_df[raw_selected_question].str.contains(selected_bar, na=False)]
     else:
-        filtered_df = filtered_df[filtered_df[selected_question] == selected_bar]
-
-
-# # -------------------------------
-# # 4️⃣ Main horizontal percentage bar chart
-# # -------------------------------
-# main_counts = prepare_counts(df[selected_question])
-# fig_main = px.bar(
-#     main_counts,
-#     x="percent",
-#     y=selected_question,
-#     orientation="h",
-#     text=main_counts.apply(
-#         lambda r: f"{r['count']} ({r['percent']:.0f}%)", axis=1
-#     ),
-# )
-
-# fig_main.update_layout(
-#     yaxis_title=None,
-#     xaxis_title="percent",
-#     yaxis={"categoryorder": "total ascending"},
-#     margin=dict(l=150, r=150, t=50, b=50),  # increase right margin for outside labels
-#     font=dict(family="Arial, sans-serif", size=16, color="black"),
-#     xaxis=dict(title_font=dict(size=18), tickfont=dict(size=14))
-# )
-
-# fig_main.update_traces(
-#     marker_color="light pink",
-#     textposition="inside",  # labels outside bars
-#     textfont_size=14
-# )
-
-# st.plotly_chart(fig_main, use_container_width=True)
-
-# # -------------------------------
-# # 5️⃣ Filter df based on selected bar
-# # -------------------------------
-# selected_bar = st.selectbox(
-#     f"Filter {selected_question} by value (or show all)", 
-#     options=["All"] + list(df[selected_question].dropna().unique())
-# )
-
-# filtered_df = df.copy()
-# if selected_bar != "All":
-#     filtered_df = df[df[selected_question] == selected_bar]
+        filtered_df = filtered_df[filtered_df[raw_selected_question] == selected_bar]
 
 # -------------------------------
-# 6️⃣ Cross-distribution charts
+# 7️⃣ Cross-distribution charts (unchanged from your original script)
 # -------------------------------
 st.subheader("Demographic profiles of respondents")
 
